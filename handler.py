@@ -262,8 +262,9 @@ def handler(job):
         }
 
 
-# Load model at startup for faster cold starts
-load_model()
+# Model loads on first request (not at startup)
+# This allows worker to initialize quickly and pass health checks
+# First request will be slower while model downloads
 
 # Start the serverless handler
 runpod.serverless.start({"handler": handler})
