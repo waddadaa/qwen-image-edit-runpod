@@ -21,7 +21,9 @@ RUN mkdir -p /app/cache/huggingface /app/cache/torch \
 COPY requirements.txt .
 
 # Install dependencies
+# Upgrade PyTorch to 2.5+ for enable_gqa support in attention
 RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir torch==2.5.1 --index-url https://download.pytorch.org/whl/cu124 && \
     pip install --no-cache-dir -r requirements.txt
 
 # Copy handler

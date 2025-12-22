@@ -1,4 +1,4 @@
-torch>=2.1.0
+# torch installed separately in Dockerfile (needs 2.5+ for GQA attention)
 transformers>=4.51.3
 accelerate>=0.25.0
 diffusers @ git+https://github.com/huggingface/diffusers.git
