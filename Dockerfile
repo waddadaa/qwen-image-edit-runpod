@@ -27,10 +27,10 @@ RUN pip install --no-cache-dir --upgrade pip && \
 # Copy handler
 COPY handler.py .
 
-# Download model during build (~58GB baked into image for fast cold starts)
-RUN python -c "from diffusers import QwenImageEditPipeline; \
-    QwenImageEditPipeline.from_pretrained('Qwen/Qwen-Image-Edit', \
-    torch_dtype='auto', use_safetensors=True)"
+# Model downloads at runtime on first request (~58GB)
+# Attach Network Volume (100GB) to /runpod-volume for persistent caching
+# First request: slow (downloads model)
+# All future requests: fast (model cached on network volume)
 
 # Expose port (optional, for debugging)
 EXPOSE 8000
