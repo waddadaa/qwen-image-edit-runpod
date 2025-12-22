@@ -27,8 +27,10 @@ RUN pip install --no-cache-dir --upgrade pip && \
 # Copy handler
 COPY handler.py .
 
-# Model (~58GB) downloads at runtime on first request
-# Attach a RunPod Network Volume (100GB) to /runpod-volume for persistent caching
+# Download model during build (~58GB baked into image for fast cold starts)
+RUN python -c "from diffusers import QwenImageEditPipeline; \
+    QwenImageEditPipeline.from_pretrained('Qwen/Qwen-Image-Edit', \
+    torch_dtype='auto', use_safetensors=True)"
 
 # Expose port (optional, for debugging)
 EXPOSE 8000

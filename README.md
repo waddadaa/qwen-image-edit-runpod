@@ -16,11 +16,15 @@ Deploy Qwen-Image-Edit as a serverless API on RunPod for AI-powered image editin
 ### 1. Build & Push Docker Image
 
 ```bash
-# Set your Docker registry
-export DOCKER_REGISTRY=your-dockerhub-username
+# Clone the repository
+git clone https://github.com/YOUR_USERNAME/qwen-image-edit-runpod.git
+cd qwen-image-edit-runpod
 
-# Build and push
-./build.sh latest --push
+# Build the Docker image (this will take a while - downloads ~58GB model)
+docker build -t your-dockerhub-username/qwen-image-edit:latest .
+
+# Push to Docker Hub
+docker push your-dockerhub-username/qwen-image-edit:latest
 ```
 
 ### 2. Deploy on RunPod
@@ -31,10 +35,7 @@ export DOCKER_REGISTRY=your-dockerhub-username
    - **Image**: `your-dockerhub-username/qwen-image-edit:latest`
    - **GPU**: A6000 or A100 (48GB+ VRAM required)
    - **Container Disk**: 100GB minimum
-   - **Network Volume**: 100GB attached to `/runpod-volume` (recommended for caching)
 4. Click **Deploy**
-
-> **Note**: Model is ~58GB. First cold start downloads the full model. Attach a network volume to cache and speed up subsequent starts.
 
 ### 3. Use the API
 
@@ -305,37 +306,22 @@ Append these to your prompts for better results:
 | Subtle edit | `strength: 0.3-0.5` |
 | Consistent results | Set `seed` to fixed value |
 
-## Local Testing
-
-```bash
-# Install dependencies
-pip install -r requirements.txt
-
-# Add a test image
-cp your_image.png test_input.png
-
-# Run test
-python test_local.py
-```
-
 ## Project Structure
 
 ```
-qwen/
-├── Dockerfile          # RunPod-optimized container
+qwen-image-edit-runpod/
+├── Dockerfile          # RunPod-optimized container (includes model)
 ├── handler.py          # Serverless request handler
 ├── requirements.txt    # Python dependencies
-├── build.sh           # Build & push script
-├── test_local.py      # Local testing script
-└── README.md          # This file
+├── LICENSE             # Apache 2.0 License
+└── README.md           # This file
 ```
 
 ## Hardware Requirements
 
 - **GPU**: 48GB+ VRAM (A6000, A100)
 - **Container Disk**: 100GB minimum
-- **Model Size**: ~58GB (20B parameters)
-- **Network Volume**: 100GB recommended for caching
+- **Model Size**: ~58GB (baked into Docker image)
 
 ## Troubleshooting
 
@@ -349,14 +335,6 @@ result = endpoint.run_sync({
     "prompt": "Your edit",
     "max_size": 768
 })
-```
-
-### Slow Cold Starts
-
-Uncomment the model pre-download line in `Dockerfile` to bake weights into the image:
-
-```dockerfile
-RUN python -c "from diffusers import QwenImageEditPipeline; QwenImageEditPipeline.from_pretrained('Qwen/Qwen-Image-Edit')"
 ```
 
 ### Blurry Results
@@ -374,4 +352,4 @@ result = endpoint.run_sync({
 
 ## License
 
-This project uses the Qwen-Image-Edit model. Please refer to the [Qwen-Image repository](https://github.com/QwenLM/Qwen-Image) for model licensing terms.
+Apache 2.0 - Same as the [Qwen-Image-Edit model](https://huggingface.co/Qwen/Qwen-Image-Edit). See [LICENSE](LICENSE) for details.
