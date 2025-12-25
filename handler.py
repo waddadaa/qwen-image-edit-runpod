@@ -79,24 +79,24 @@ def resize_image(image: Image.Image, width: int = None, height: int = None) -> I
 
 def handler(job):
     """
-    RunPod serverless handler for image editing.
+    RunPod serverless handler for image editing using QwenImageEditPipeline.
+
+    API Reference: https://huggingface.co/docs/diffusers/main/api/pipelines/qwenimage
 
     All Available Parameters:
     {
         "input": {
-            # Required (use ONE of these)
+            # Required
             "image": "<base64 encoded image>",          # Single image input
-            "images": ["<base64_1>", "<base64_2>"],     # Multiple images (1-3 optimal)
+            "images": ["<base64_1>", "<base64_2>"],     # OR multiple images (1-3)
             "prompt": "Edit instruction",
 
-            # Generation Parameters
+            # Generation Parameters (QwenImageEditPipeline supported)
             "negative_prompt": " ",           # What to avoid (default: " ")
             "num_inference_steps": 50,        # Denoising steps (1-150, default: 50)
-            "true_cfg_scale": 4.0,            # Prompt adherence (1.0-20.0, default: 4.0)
-            "guidance_scale": 7.5,            # Classifier-free guidance (1.0-20.0, default: 7.5)
-            "strength": 0.8,                  # Edit strength (0.0-1.0, default: 0.8)
+            "true_cfg_scale": 4.0,            # CFG guidance (1.0-20.0, default: 4.0)
             "seed": null,                     # Random seed for reproducibility
-            "num_images": 1,                  # Number of output images to generate (1-4)
+            "num_images": 1,                  # Number of output images (1-4)
 
             # Image Size
             "width": null,                    # Output width (default: same as input)
@@ -110,10 +110,11 @@ def handler(job):
         }
     }
 
+    Note: 'strength' and 'guidance_scale' are NOT supported by QwenImageEditPipeline.
+
     Multi-Image Examples:
     - Combine person from image1 with background from image2
     - "The person from image 1 is standing in the scene from image 2"
-    - "Blend the style of image 1 with the content of image 2"
     """
     job_input = job.get("input", {})
 
@@ -148,12 +149,11 @@ def handler(job):
         original_size = input_images[0].size
 
         # === Generation Parameters ===
+        # See: https://huggingface.co/docs/diffusers/main/api/pipelines/qwenimage
         prompt = job_input["prompt"]
-        negative_prompt = job_input.get("negative_prompt", " ")
+        negative_prompt = job_input.get("negative_prompt", " ")  # Space is default
         num_inference_steps = job_input.get("num_inference_steps", 50)
-        true_cfg_scale = job_input.get("true_cfg_scale", 4.0)
-        guidance_scale = job_input.get("guidance_scale", 7.5)
-        strength = job_input.get("strength", 0.8)
+        true_cfg_scale = job_input.get("true_cfg_scale", 4.0)  # CFG guidance, >1 enables negative_prompt
         seed = job_input.get("seed", None)
         num_images = min(job_input.get("num_images", 1), 4)  # Cap at 4
 
@@ -170,8 +170,6 @@ def handler(job):
         # Validate parameters
         num_inference_steps = max(1, min(150, int(num_inference_steps)))
         true_cfg_scale = max(1.0, min(20.0, float(true_cfg_scale)))
-        guidance_scale = max(1.0, min(20.0, float(guidance_scale)))
-        strength = max(0.0, min(1.0, float(strength)))
         output_quality = max(1, min(100, int(output_quality)))
 
         if output_format not in ["PNG", "JPEG", "WEBP"]:
@@ -220,14 +218,15 @@ def handler(job):
             generator = torch.Generator(device="cuda").manual_seed(seed)
 
         # Build pipeline kwargs
+        # See: https://huggingface.co/docs/diffusers/main/api/pipelines/qwenimage
+        # Supported params: image, prompt, negative_prompt, true_cfg_scale,
+        #                   num_inference_steps, num_images_per_prompt, generator
         pipe_kwargs = {
             "image": input_for_pipeline,
             "prompt": prompt,
             "negative_prompt": negative_prompt,
             "num_inference_steps": num_inference_steps,
             "true_cfg_scale": true_cfg_scale,
-            "guidance_scale": guidance_scale,
-            "strength": strength,  # Always include strength
         }
 
         # Only add num_images_per_prompt if generating multiple outputs
@@ -238,7 +237,8 @@ def handler(job):
         if generator:
             pipe_kwargs["generator"] = generator
 
-        print(f"Pipeline kwargs: prompt='{prompt[:50]}...', strength={strength}, steps={num_inference_steps}")
+        print(f"Pipeline kwargs: image_count={1 if not isinstance(input_for_pipeline, list) else len(input_for_pipeline)}, "
+              f"prompt='{prompt[:50]}...', steps={num_inference_steps}, true_cfg={true_cfg_scale}")
 
         # Run inference
         output = pipe(**pipe_kwargs)
@@ -263,8 +263,6 @@ def handler(job):
                 "negative_prompt": negative_prompt,
                 "num_inference_steps": num_inference_steps,
                 "true_cfg_scale": true_cfg_scale,
-                "guidance_scale": guidance_scale,
-                "strength": strength,
                 "num_images": num_images,
                 "input_count": len(processed_images),
                 "original_size": list(original_size),
