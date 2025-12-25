@@ -46,7 +46,12 @@ def decode_base64_image(image_data: str) -> Image.Image:
     if image_data.startswith("data:"):
         image_data = image_data.split(",", 1)[1]
     image_bytes = base64.b64decode(image_data)
-    return Image.open(io.BytesIO(image_bytes)).convert("RGB")
+    img = Image.open(io.BytesIO(image_bytes)).convert("RGB")
+
+    # Log image details for debugging
+    print(f"Decoded image: size={img.size}, mode={img.mode}")
+
+    return img
 
 
 def encode_image_to_base64(image: Image.Image, format: str = "PNG", quality: int = 95) -> str:
@@ -173,17 +178,40 @@ def handler(job):
             output_format = "PNG"
 
         # Resize all input images if needed to prevent OOM
+        # Also ensure dimensions are divisible by 14 (Qwen patch size)
+        PATCH_SIZE = 14
         processed_images = []
         for img in input_images:
-            if max_size and (img.width > max_size or img.height > max_size):
-                ratio = max_size / max(img.width, img.height)
-                new_width = int(img.width * ratio)
-                new_height = int(img.height * ratio)
-                img = img.resize((new_width, new_height), Image.Resampling.LANCZOS)
+            w, h = img.size
+
+            # First, scale down if too large
+            if max_size and (w > max_size or h > max_size):
+                ratio = max_size / max(w, h)
+                w = int(w * ratio)
+                h = int(h * ratio)
+
+            # Ensure dimensions are divisible by patch size
+            w = (w // PATCH_SIZE) * PATCH_SIZE
+            h = (h // PATCH_SIZE) * PATCH_SIZE
+
+            # Minimum size
+            w = max(w, PATCH_SIZE * 4)  # At least 56 pixels
+            h = max(h, PATCH_SIZE * 4)
+
+            if (w, h) != img.size:
+                print(f"Resizing image from {img.size} to ({w}, {h})")
+                img = img.resize((w, h), Image.Resampling.LANCZOS)
+
             processed_images.append(img)
 
-        # Use single image or list based on count
-        input_for_pipeline = processed_images[0] if len(processed_images) == 1 else processed_images
+        # For single image, pass directly; for multiple, pass as list
+        # Important: Qwen pipeline expects single PIL.Image for single edit
+        if len(processed_images) == 1:
+            input_for_pipeline = processed_images[0]
+            print(f"Single image mode: size={input_for_pipeline.size}")
+        else:
+            input_for_pipeline = processed_images
+            print(f"Multi-image mode: {len(processed_images)} images")
 
         # Set up generator for reproducibility
         generator = None
@@ -199,14 +227,18 @@ def handler(job):
             "num_inference_steps": num_inference_steps,
             "true_cfg_scale": true_cfg_scale,
             "guidance_scale": guidance_scale,
-            "num_images_per_prompt": num_images,
+            "strength": strength,  # Always include strength
         }
 
-        # Add optional parameters if supported
+        # Only add num_images_per_prompt if generating multiple outputs
+        if num_images > 1:
+            pipe_kwargs["num_images_per_prompt"] = num_images
+
+        # Add generator for reproducibility
         if generator:
             pipe_kwargs["generator"] = generator
-        if strength != 0.8:
-            pipe_kwargs["strength"] = strength
+
+        print(f"Pipeline kwargs: prompt='{prompt[:50]}...', strength={strength}, steps={num_inference_steps}")
 
         # Run inference
         output = pipe(**pipe_kwargs)
